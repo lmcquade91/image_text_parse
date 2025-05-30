@@ -1,56 +1,72 @@
-# rail_text_parser.py
+# app.py
 
-"""
-This script preprocesses images of rail text (chalk/paint marker) and parses the text using Tesseract OCR.
-"""
-
-import cv2
-import numpy as np
+import streamlit as st
 from PIL import Image
+import numpy as np
+import cv2
 import pytesseract
-import sys
 
-def preprocess_image_for_rail_text(image_path):
+# Title
+st.title("Rail Track Text Parser 🚂")
+
+# Description
+st.write("""
+Upload an image of rail text (chalk/paint marker on metal) and extract the text using OCR.
+This app uses OpenCV preprocessing to improve text detection.
+""")
+
+# File uploader
+uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
+
+def preprocess_image_for_rail_text(pil_image):
     """
-    Preprocesses an image for better OCR performance on painted text.
-    Returns a PIL image ready for pytesseract.
+    Preprocess the image to make painted/printed rail text clearer for OCR.
     """
-    # Load the image
-    img = cv2.imread(image_path)
+    # Convert PIL image to OpenCV
+    img = np.array(pil_image)
+    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
-    # Convert to grayscale
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Apply adaptive thresholding to increase contrast
+    # Apply adaptive thresholding
     img_thresh = cv2.adaptiveThreshold(
         img_gray, 255,
         cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV,
         15, 10
     )
 
-    # Save or display the preprocessed image for debugging
-    # cv2.imwrite('preprocessed.jpg', img_thresh)
-
     # Convert back to PIL for pytesseract
     return Image.fromarray(img_thresh)
 
-def parse_text_from_image(image_path):
-    """
-    Preprocesses the image and extracts text using pytesseract.
-    """
-    preprocessed_img = preprocess_image_for_rail_text(image_path)
+if uploaded_file is not None:
+    # Display uploaded image
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    # Use Tesseract with custom config
+    # Preprocess
+    st.write("🔧 Preprocessing image...")
+    preprocessed_img = preprocess_image_for_rail_text(image)
+    st.image(preprocessed_img, caption="Preprocessed Image", use_container_width=True)
+
+    # OCR
+    st.write("🕵️ Parsing text from image...")
     custom_config = r'--oem 3 --psm 6'
     text = pytesseract.image_to_string(preprocessed_img, config=custom_config)
 
-    print("\n=== Parsed Text ===\n")
-    print(text)
-    print("\n===================\n")
+    # Display extracted text
+    st.subheader("Parsed Text:")
+    st.text_area("Extracted Text", text, height=200)
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python rail_text_parser.py path/to/image.jpg")
-    else:
-        image_path = sys.argv[1]
-        parse_text_from_image(image_path)
+    # Optional: Download button for the text
+    st.download_button(
+        label="Download Extracted Text",
+        data=text,
+        file_name="rail_text.txt",
+        mime="text/plain"
+    )
+
+else:
+    st.info("Please upload an image to begin.")
+
+# Footer
+st.markdown("---")
+st.markdown("Created with ❤️ by [Your Name].")
+
