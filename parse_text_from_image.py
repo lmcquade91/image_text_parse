@@ -1,51 +1,56 @@
-# app.py
+# rail_text_parser.py
+
 """
-Streamlit Image Text Parser App
-This app lets users upload an image, extracts the text using pytesseract, and displays it.
+This script preprocesses images of rail text (chalk/paint marker) and parses the text using Tesseract OCR.
 """
 
-import streamlit as st
+import cv2
+import numpy as np
 from PIL import Image
 import pytesseract
+import sys
 
-# Set the title of the app
-st.title("🖼️ Image Text Parser")
+def preprocess_image_for_rail_text(image_path):
+    """
+    Preprocesses an image for better OCR performance on painted text.
+    Returns a PIL image ready for pytesseract.
+    """
+    # Load the image
+    img = cv2.imread(image_path)
 
-# Description / instructions
-st.write("""
-Upload an image (JPEG, PNG, etc.), and this app will use **OCR (pytesseract)** to extract any text it can find!
-""")
+    # Convert to grayscale
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-# File uploader widget
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-
-if uploaded_file is not None:
-    # Open and display the image
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_container_width=True)
-
-
-    # OCR processing
-    st.write("Parsing text from image... 🕵️‍♂️")
-    text = pytesseract.image_to_string(image)
-
-    # Display the extracted text
-    st.subheader("Parsed Text:")
-    st.text_area("Extracted Text", text, height=200)
-
-    # Optional: Download button to save the text as a .txt file
-    st.download_button(
-        label="Download Extracted Text",
-        data=text,
-        file_name="parsed_text.txt",
-        mime="text/plain"
+    # Apply adaptive thresholding to increase contrast
+    img_thresh = cv2.adaptiveThreshold(
+        img_gray, 255,
+        cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV,
+        15, 10
     )
 
-else:
-    st.info("Please upload an image to get started.")
+    # Save or display the preprocessed image for debugging
+    # cv2.imwrite('preprocessed.jpg', img_thresh)
 
-# Footer
-st.markdown("""
----
-Created with ❤️ using Streamlit and pytesseract.
-""")
+    # Convert back to PIL for pytesseract
+    return Image.fromarray(img_thresh)
+
+def parse_text_from_image(image_path):
+    """
+    Preprocesses the image and extracts text using pytesseract.
+    """
+    preprocessed_img = preprocess_image_for_rail_text(image_path)
+
+    # Use Tesseract with custom config
+    custom_config = r'--oem 3 --psm 6'
+    text = pytesseract.image_to_string(preprocessed_img, config=custom_config)
+
+    print("\n=== Parsed Text ===\n")
+    print(text)
+    print("\n===================\n")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python rail_text_parser.py path/to/image.jpg")
+    else:
+        image_path = sys.argv[1]
+        parse_text_from_image(image_path)
