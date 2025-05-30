@@ -1,96 +1,83 @@
-# app.py
+# parse_rail_fields.py
+"""
+Script to extract structured key-value pairs from rail images.
+"""
 
-import streamlit as st
-from PIL import Image
-import numpy as np
-import cv2
 import pytesseract
+from PIL import Image
+import re
+import cv2
+import numpy as np
+import sys
 
-st.title("Rail Track Text Parser 🚂")
-
-st.write("""
-Upload an image of rail text (chalk/paint marker on metal) and extract the text using OCR.
-This app uses OpenCV to automatically crop to the largest text area and preprocess it for better OCR results.
-""")
-
-uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
-
-def crop_largest_text_area(pil_image):
-    """
-    Automatically crop the image to the largest contour (assumed to be the text area).
-    """
-    img = np.array(pil_image)
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-    # Threshold to binary image
-    _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
-
-    # Find contours
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if contours:
-        # Find the largest contour
-        c = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(c)
-
-        # Crop the image to this bounding box
-        cropped_img = img[y:y+h, x:x+w]
-        return cropped_img
-    else:
-        return img  # fallback: return original image
-
-def preprocess_image_for_rail_text(pil_image):
-    """
-    Preprocess the image to make painted/printed rail text clearer for OCR.
-    """
-    img = np.array(pil_image)
-    img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+def preprocess_image(image_path):
+    # Load the image using OpenCV
+    img = cv2.imread(image_path)
+    
+    # Convert to grayscale
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Apply adaptive thresholding
     img_thresh = cv2.adaptiveThreshold(
-        img_gray, 255,
-        cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV,
-        15, 10
+        img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10
     )
+
+    # Save the preprocessed image for debugging
+    cv2.imwrite('preprocessed.jpg', img_thresh)
 
     # Convert back to PIL for pytesseract
     return Image.fromarray(img_thresh)
 
-if uploaded_file is not None:
-    # Load image
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_container_width=True)
+def extract_fields(text):
+    """
+    Use regex to extract key-value pairs from the OCR text.
+    """
+    fields = {}
+    patterns = {
+        "DATE": r"DATE\s*[:\-]?\s*(\S+)",
+        "TIME": r"TIME\s*[:\-]?\s*(\S+)",
+        "TEMP": r"TEMP\s*[:\-]?\s*(\S+)",
+        "WELDER1": r"WELDER ?#?1\s*[:\-]?\s*(\S+)",
+        "WELDER2": r"WELDER ?#?2\s*[:\-]?\s*(\S+)",
+        "PROFILE": r"PROFILE\s*[:\-]?\s*(\S+)",
+        "TRUCK": r"TRUCK ?#?\s*[:\-]?\s*(\S+)",
+        "KM": r"KM\s*[:\-]?\s*(\S+)",
+        "TAPPING": r"TAPPING\s*[:\-]?\s*(\S+)",
+        "WELD": r"WELD ?#?\s*[:\-]?\s*(\S+)",
+        "PORTION": r"PORTION ?#?\s*[:\-]?\s*(\S+)",
+        "RAIL TYPE": r"RAIL TYPE\s*[:\-]?\s*([\S\s]+?)\s*PEAK"
+    }
 
-    # Crop to largest text area
-    st.write("🔍 Cropping to largest text area...")
-    cropped_img = crop_largest_text_area(image)
-    st.image(cropped_img, caption="Cropped Image", use_container_width=True)
+    for field, pattern in patterns.items():
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            fields[field] = match.group(1).strip()
+        else:
+            fields[field] = None
+    return fields
 
-    # Preprocess
-    st.write("🔧 Preprocessing image...")
-    preprocessed_img = preprocess_image_for_rail_text(Image.fromarray(cropped_img))
-    st.image(preprocessed_img, caption="Preprocessed Image", use_container_width=True)
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python parse_rail_fields.py path/to/image.jpg")
+    else:
+        image_path = sys.argv[1]
 
-    # OCR
-    st.write("🕵️ Parsing text from image...")
-    custom_config = r'--oem 3 --psm 6'
-    text = pytesseract.image_to_string(preprocessed_img, config=custom_config)
+        # Preprocess image
+        preprocessed_img = preprocess_image(image_path)
 
-    # Display extracted text
-    st.subheader("Parsed Text:")
-    st.text_area("Extracted Text", text, height=200)
+        # OCR
+        custom_config = r'--oem 3 --psm 6'
+        text = pytesseract.image_to_string(preprocessed_img, config=custom_config)
 
-    # Optional: Download button for the text
-    st.download_button(
-        label="Download Extracted Text",
-        data=text,
-        file_name="rail_text.txt",
-        mime="text/plain"
-    )
-else:
-    st.info("Please upload an image to begin.")
+        print("\n=== Raw OCR Output ===\n")
+        print(text)
+        print("\n======================\n")
 
-# Footer
-st.markdown("---")
-st.markdown("Created with ❤️ by [Your Name].")
+        # Extract fields
+        fields = extract_fields(text)
+
+        print("\n=== Structured Fields ===\n")
+        for key, value in fields.items():
+            print(f"{key}: {value}")
+        print("\n==========================\n")
 
