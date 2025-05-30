@@ -6,23 +6,43 @@ import numpy as np
 import cv2
 import pytesseract
 
-# Title
 st.title("Rail Track Text Parser 🚂")
 
-# Description
 st.write("""
 Upload an image of rail text (chalk/paint marker on metal) and extract the text using OCR.
-This app uses OpenCV preprocessing to improve text detection.
+This app uses OpenCV to automatically crop to the largest text area and preprocess it for better OCR results.
 """)
 
-# File uploader
 uploaded_file = st.file_uploader("Upload an image...", type=["jpg", "jpeg", "png"])
+
+def crop_largest_text_area(pil_image):
+    """
+    Automatically crop the image to the largest contour (assumed to be the text area).
+    """
+    img = np.array(pil_image)
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    # Threshold to binary image
+    _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+
+    # Find contours
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if contours:
+        # Find the largest contour
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+
+        # Crop the image to this bounding box
+        cropped_img = img[y:y+h, x:x+w]
+        return cropped_img
+    else:
+        return img  # fallback: return original image
 
 def preprocess_image_for_rail_text(pil_image):
     """
     Preprocess the image to make painted/printed rail text clearer for OCR.
     """
-    # Convert PIL image to OpenCV
     img = np.array(pil_image)
     img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
@@ -37,13 +57,18 @@ def preprocess_image_for_rail_text(pil_image):
     return Image.fromarray(img_thresh)
 
 if uploaded_file is not None:
-    # Display uploaded image
+    # Load image
     image = Image.open(uploaded_file)
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
+    # Crop to largest text area
+    st.write("🔍 Cropping to largest text area...")
+    cropped_img = crop_largest_text_area(image)
+    st.image(cropped_img, caption="Cropped Image", use_container_width=True)
+
     # Preprocess
     st.write("🔧 Preprocessing image...")
-    preprocessed_img = preprocess_image_for_rail_text(image)
+    preprocessed_img = preprocess_image_for_rail_text(Image.fromarray(cropped_img))
     st.image(preprocessed_img, caption="Preprocessed Image", use_container_width=True)
 
     # OCR
@@ -62,7 +87,6 @@ if uploaded_file is not None:
         file_name="rail_text.txt",
         mime="text/plain"
     )
-
 else:
     st.info("Please upload an image to begin.")
 
