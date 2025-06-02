@@ -6,6 +6,7 @@ import pandas as pd
 import piexif
 import base64
 
+# Helper function to extract GPS data
 def extract_gps_from_image(image_file):
     try:
         exif_dict = piexif.load(image_file.info["exif"])
@@ -26,6 +27,7 @@ def extract_gps_from_image(image_file):
         return None, None
     return None, None
 
+# Streamlit UI
 st.title("Rail Text Field Entry & Geotag Extraction 🚂")
 
 # Step 1: Upload Image
@@ -79,17 +81,19 @@ if uploaded_file:
                 "Latitude": [lat],
                 "Longitude": [lon]
             }
-
             df = pd.DataFrame(data)
 
-# Save to Excel
-excel_buffer = BytesIO()
-with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
-    df.to_excel(writer, index=False, sheet_name="Rail Data")
-excel_data = excel_buffer.getvalue()
+            # Save to Excel
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Rail Data")
+            excel_data = excel_buffer.getvalue()
 
-# Provide download link
-b64 = base64.b64encode(excel_data).decode()
-href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
-st.markdown(href, unsafe_allow_html=True)
+            # Provide download link
+            b64 = base64.b64encode(excel_data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
+else:
+    st.info("Please upload an image to begin parsing.")
 
