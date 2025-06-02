@@ -1,61 +1,96 @@
+# app.py
 import streamlit as st
 from PIL import Image
-import pytesseract
-import cv2
-import numpy as np
+from io import BytesIO
+import pandas as pd
+import piexif
+import base64
 
-st.title("Rail Text OCR Parser 🚂")
-
-uploaded_file = st.file_uploader("Upload an image of rail text...", type=["jpg", "png", "jpeg"])
-
-if uploaded_file is not None:
+def extract_gps_from_image(image_file):
     try:
-        # Display uploaded image
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        exif_dict = piexif.load(image_file.info["exif"])
+        gps_data = exif_dict.get("GPS", {})
 
-        # Preprocess with OpenCV
-        img = np.array(image)
-        img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        img_thresh = cv2.adaptiveThreshold(
-            img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10
-        )
-        st.image(img_thresh, caption="Preprocessed Image", use_container_width=True)
+        def get_coord(coord, ref):
+            d, m, s = [x[0] / x[1] for x in coord]
+            result = d + (m / 60.0) + (s / 3600.0)
+            if ref in ['S', 'W']:
+                result = -result
+            return result
 
-        # OCR
-        custom_config = r'--oem 3 --psm 6'
-        text = pytesseract.image_to_string(Image.fromarray(img_thresh), config=custom_config)
+        if gps_data:
+            lat = get_coord(gps_data[piexif.GPSIFD.GPSLatitude], gps_data[piexif.GPSIFD.GPSLatitudeRef].decode())
+            lon = get_coord(gps_data[piexif.GPSIFD.GPSLongitude], gps_data[piexif.GPSIFD.GPSLongitudeRef].decode())
+            return lat, lon
+    except Exception:
+        return None, None
+    return None, None
 
-        st.subheader("Raw OCR Output:")
-        st.text_area("OCR Text", text, height=200)
+st.title("Rail Text Field Entry & Geotag Extraction 🚂")
 
-        # Parse key-value pairs
-        import re
-        fields = {}
-        patterns = {
-            "DATE": r"DATE\s*[:\-]?\s*(\S+)",
-            "TIME": r"TIME\s*[:\-]?\s*(\S+)",
-            "TEMP": r"TEMP\s*[:\-]?\s*(\S+)",
-            "WELDER1": r"WELDER ?#?1\s*[:\-]?\s*(\S+)",
-            "WELDER2": r"WELDER ?#?2\s*[:\-]?\s*(\S+)",
-            "PROFILE": r"PROFILE\s*[:\-]?\s*(\S+)",
-            "TRUCK": r"TRUCK ?#?\s*[:\-]?\s*(\S+)",
-            "KM": r"KM\s*[:\-]?\s*(\S+)",
-            "TAPPING": r"TAPPING\s*[:\-]?\s*(\S+)",
-            "WELD": r"WELD ?#?\s*[:\-]?\s*(\S+)",
-            "PORTION": r"PORTION ?#?\s*[:\-]?\s*(\S+)",
-            "RAIL TYPE": r"RAIL TYPE\s*[:\-]?\s*([\S\s]+?)\s*PEAK"
-        }
-        for field, pattern in patterns.items():
-            match = re.search(pattern, text, re.IGNORECASE)
-            fields[field] = match.group(1).strip() if match else "Not found"
+# Step 1: Upload Image
+uploaded_file = st.file_uploader("Upload an image of rail text...", type=["jpg", "jpeg", "png"])
 
-        st.subheader("Parsed Fields:")
-        st.json(fields)
+if uploaded_file:
+    # Display the uploaded image
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-        st.stop()
-else:
-    st.info("Please upload an image to begin parsing.")
+    # Extract GPS data
+    lat, lon = extract_gps_from_image(image)
+    if lat and lon:
+        st.success(f"GPS Data found! Latitude: {lat}, Longitude: {lon}")
+    else:
+        st.warning("No GPS data found in the image.")
+
+    # Step 2: Show form for manual entry
+    with st.form("rail_info_form"):
+        st.subheader("Enter Rail Info (manually if needed)")
+        date = st.text_input("DATE")
+        time = st.text_input("TIME")
+        temp = st.text_input("TEMP")
+        welder1 = st.text_input("WELDER1")
+        welder2 = st.text_input("WELDER2")
+        profile = st.text_input("PROFILE")
+        truck = st.text_input("TRUCK")
+        km = st.text_input("KM")
+        tapping = st.text_input("TAPPING")
+        weld = st.text_input("WELD")
+        portion = st.text_input("PORTION")
+        rail_type = st.text_input("RAIL TYPE")
+
+        submitted = st.form_submit_button("Save to Excel")
+
+        if submitted:
+            # Compile data
+            data = {
+                "DATE": [date],
+                "TIME": [time],
+                "TEMP": [temp],
+                "WELDER1": [welder1],
+                "WELDER2": [welder2],
+                "PROFILE": [profile],
+                "TRUCK": [truck],
+                "KM": [km],
+                "TAPPING": [tapping],
+                "WELD": [weld],
+                "PORTION": [portion],
+                "RAIL TYPE": [rail_type],
+                "Latitude": [lat],
+                "Longitude": [lon]
+            }
+
+            df = pd.DataFrame(data)
+
+            # Save to Excel
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Rail Data")
+                writer.save()
+            excel_data = excel_buffer.getvalue()
+
+            # Provide download link
+            b64 = base64.b64encode(excel_data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
+            st.markdown(href, unsafe_allow_html=True)
 
