@@ -86,7 +86,10 @@ if uploaded_file:
             excel_buffer = BytesIO()
             with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Rail Data")
-                writer.save()
+                with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+    df.to_excel(writer, index=False, sheet_name="Rail Data")
+# No need for writer.save()
+excel_data = excel_buffer.getvalue()
             excel_data = excel_buffer.getvalue()
 
             # Provide download link
