@@ -93,8 +93,3 @@ b64 = base64.b64encode(excel_data).decode()
 href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
 st.markdown(href, unsafe_allow_html=True)
 
-            # Provide download link
-            b64 = base64.b64encode(excel_data).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
-            st.markdown(href, unsafe_allow_html=True)
-
