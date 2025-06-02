@@ -82,15 +82,16 @@ if uploaded_file:
 
             df = pd.DataFrame(data)
 
-            # Save to Excel
-            excel_buffer = BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Rail Data")
-                with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+# Save to Excel
+excel_buffer = BytesIO()
+with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
     df.to_excel(writer, index=False, sheet_name="Rail Data")
-# No need for writer.save()
 excel_data = excel_buffer.getvalue()
-            excel_data = excel_buffer.getvalue()
+
+# Provide download link
+b64 = base64.b64encode(excel_data).decode()
+href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
+st.markdown(href, unsafe_allow_html=True)
 
             # Provide download link
             b64 = base64.b64encode(excel_data).decode()
