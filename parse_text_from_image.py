@@ -1,9 +1,11 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU-only for entire runtime
+
 import streamlit as st
 from PIL import Image
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import torch
 
-# Load TrOCR
 @st.cache_resource(show_spinner="Loading TrOCR model…")
 def load_trocr_model():
     processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
@@ -20,7 +22,6 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
     with st.spinner("Extracting handwritten text…"):
-        # No .to(device) calls
         pixel_values = processor(images=image, return_tensors="pt").pixel_values
         generated_ids = model.generate(pixel_values)
         extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
