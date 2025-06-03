@@ -10,12 +10,12 @@ from google.cloud import vision
 # 🔵 Load the Google Vision API credentials from Streamlit secrets
 gcp_creds = st.secrets["google"]["credentials"]
 
-# Save to a file that the Google Vision API client can use
+# Save to a file for the Google Vision client
 with open("gcp_credentials.json", "w") as f:
     f.write(gcp_creds)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_credentials.json"
 
-# 🔵 Initialize the Vision API client
+# 🔵 Initialize Google Vision API client
 client = vision.ImageAnnotatorClient()
 
 # 🟢 Helper function to parse extracted text into form fields
@@ -113,3 +113,4 @@ if uploaded_file:
             b64 = base64.b64encode(excel_data).decode()
             href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
             st.markdown(href, unsafe_allow_html=True)
+
