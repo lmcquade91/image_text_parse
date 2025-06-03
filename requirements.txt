@@ -1,2 +1,5 @@
-pillow
-
+streamlit
+google-cloud-vision
+pandas
+Pillow
+openpyxl
