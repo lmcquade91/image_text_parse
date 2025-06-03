@@ -21,9 +21,14 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
     with st.spinner("Extracting handwritten text…"):
-        pixel_values = processor(images=image, return_tensors="pt").pixel_values
+        # Ensure model and input are on the same device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = model.to(device)
+
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(device)
         generated_ids = model.generate(pixel_values)
         extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
     st.subheader("Extracted Handwritten Text")
     st.write(extracted_text)
+
