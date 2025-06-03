@@ -1,21 +1,29 @@
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+# app_test_trocr.py
+import streamlit as st
 from PIL import Image
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-# Load the TrOCR model
-processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
-model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
+# Load TrOCR model
+@st.cache_resource(show_spinner="Loading TrOCR model…")
+def load_trocr_model():
+    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
+    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
+    return processor, model
 
-# Load your handwritten image (replace with your actual image file)
-image_path = 'handwritten_image.jpg'
-image = Image.open(image_path).convert('RGB')
+processor, model = load_trocr_model()
 
-# OCR Extraction
-pixel_values = processor(images=image, return_tensors="pt").pixel_values
-generated_ids = model.generate(pixel_values)
-extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+# Streamlit UI
+st.title("📝 Handwritten OCR Test with TrOCR")
+uploaded_file = st.file_uploader("Upload your handwritten image", type=["jpg", "jpeg", "png"])
 
-print("📝 Extracted Handwritten Text:")
-print(extracted_text)
+if uploaded_file:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
+    with st.spinner("Extracting handwritten text…"):
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values
+        generated_ids = model.generate(pixel_values)
+        extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-
+    st.subheader("Extracted Handwritten Text")
+    st.write(extracted_text)
