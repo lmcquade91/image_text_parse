@@ -1,32 +1,115 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide any GPU
-
-import streamlit as st
+import io
+import base64
+import pandas as pd
+from io import BytesIO
 from PIL import Image
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-import torch
+import streamlit as st
+from google.cloud import vision
 
-@st.cache_resource(show_spinner="Loading TrOCR model…")
-def load_trocr_model():
-    processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
-    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
-    model = model.to("cpu")  # <-- Move entire model to CPU (works in all versions!)
-    return processor, model
+# 🔵 Load the Google Vision API credentials from Streamlit secrets
+gcp_creds = st.secrets["google"]["credentials"]
 
-processor, model = load_trocr_model()
+# Save to a file that the Google Vision API client can use
+with open("gcp_credentials.json", "w") as f:
+    f.write(gcp_creds)
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_credentials.json"
 
-st.title("📝 Handwritten OCR Test with TrOCR")
-uploaded_file = st.file_uploader("Upload your handwritten image", type=["jpg", "jpeg", "png"])
+# 🔵 Initialize the Vision API client
+client = vision.ImageAnnotatorClient()
+
+# 🟢 Helper function to parse extracted text into form fields
+def parse_extracted_text(extracted_text):
+    fields = {
+        "DATE": "",
+        "TIME": "",
+        "TEMP": "",
+        "WELDER1": "",
+        "WELDER2": "",
+        "PROFILE": "",
+        "TRUCK": "",
+        "KM": "",
+        "TAPPING": "",
+        "WELD": "",
+        "PORTION": "",
+        "RAIL TYPE": ""
+    }
+    for line in extracted_text.split("\n"):
+        for key in fields.keys():
+            if line.upper().startswith(key):
+                value = line.split(":", 1)[-1].strip()
+                fields[key] = value
+                break
+    return fields
+
+# 🟡 Streamlit app
+st.title("🚂 Rail Text Field Entry & Handwritten OCR (Google Vision API)")
+
+uploaded_file = st.file_uploader("Upload a handwritten image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
+    # Show the uploaded image
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
+    # Use Google Vision API to extract handwritten text
     with st.spinner("Extracting handwritten text…"):
-        pixel_values = processor(images=image, return_tensors="pt").pixel_values
-        pixel_values = pixel_values.to("cpu")  # <-- Ensure input is on CPU
-        generated_ids = model.generate(pixel_values)
-        extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        image_bytes = uploaded_file.read()
+        gcv_image = vision.Image(content=image_bytes)
+        response = client.document_text_detection(image=gcv_image)
+        extracted_text = response.full_text_annotation.text
 
-    st.subheader("Extracted Handwritten Text")
+    st.subheader("📝 Extracted Handwritten Text")
     st.write(extracted_text)
+
+    # Parse extracted text into form fields
+    parsed_fields = parse_extracted_text(extracted_text)
+
+    # 🔵 Editable form
+    with st.form("rail_info_form"):
+        st.subheader("Enter / Confirm Rail Info")
+        date = st.text_input("DATE", value=parsed_fields["DATE"])
+        time_val = st.text_input("TIME", value=parsed_fields["TIME"])
+        temp = st.text_input("TEMP", value=parsed_fields["TEMP"])
+        welder1 = st.text_input("WELDER1", value=parsed_fields["WELDER1"])
+        welder2 = st.text_input("WELDER2", value=parsed_fields["WELDER2"])
+        profile = st.text_input("PROFILE", value=parsed_fields["PROFILE"])
+        truck = st.text_input("TRUCK", value=parsed_fields["TRUCK"])
+        km = st.text_input("KM", value=parsed_fields["KM"])
+        tapping = st.text_input("TAPPING", value=parsed_fields["TAPPING"])
+        weld = st.text_input("WELD", value=parsed_fields["WELD"])
+        portion = st.text_input("PORTION", value=parsed_fields["PORTION"])
+        rail_type = st.text_input("RAIL TYPE", value=parsed_fields["RAIL TYPE"])
+        extracted_text_field = st.text_area("Full Extracted Text (editable)", extracted_text)
+
+        submitted = st.form_submit_button("Save to Excel")
+
+        if submitted:
+            # Create DataFrame with form data
+            data = {
+                "DATE": [date],
+                "TIME": [time_val],
+                "TEMP": [temp],
+                "WELDER1": [welder1],
+                "WELDER2": [welder2],
+                "PROFILE": [profile],
+                "TRUCK": [truck],
+                "KM": [km],
+                "TAPPING": [tapping],
+                "WELD": [weld],
+                "PORTION": [portion],
+                "RAIL TYPE": [rail_type],
+                "Extracted Text": [extracted_text_field]
+            }
+            df = pd.DataFrame(data)
+
+            # Save to Excel
+            excel_buffer = BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Rail Data")
+            excel_data = excel_buffer.getvalue()
+
+            # Create download link
+            b64 = base64.b64encode(excel_data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
+            st.markdown(href, unsafe_allow_html=True)
