@@ -1,15 +1,19 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU-only for entire runtime
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Make sure no GPU is visible
 
 import streamlit as st
 from PIL import Image
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import torch
 
+# Load TrOCR
 @st.cache_resource(show_spinner="Loading TrOCR model…")
 def load_trocr_model():
     processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
-    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
+    model = VisionEncoderDecoderModel.from_pretrained(
+        'microsoft/trocr-base-handwritten',
+        device_map="cpu"  # <--- Forcibly load everything on CPU!
+    )
     return processor, model
 
 processor, model = load_trocr_model()
