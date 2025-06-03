@@ -1,9 +1,9 @@
 import streamlit as st
 from PIL import Image
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-import torch  # <-- This is the missing import!
+import torch
 
-# Load the model
+# Load TrOCR
 @st.cache_resource(show_spinner="Loading TrOCR model…")
 def load_trocr_model():
     processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
@@ -20,13 +20,11 @@ if uploaded_file:
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
     with st.spinner("Extracting handwritten text…"):
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = "cpu"  # Force CPU usage for compatibility
         model = model.to(device)
-
         pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(device)
         generated_ids = model.generate(pixel_values)
         extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
     st.subheader("Extracted Handwritten Text")
     st.write(extracted_text)
-
