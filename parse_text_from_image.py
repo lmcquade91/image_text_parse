@@ -7,10 +7,9 @@ from PIL import Image
 import streamlit as st
 from google.cloud import vision
 
-# 🔵 Load the Google Vision API credentials from Streamlit secrets
+# 🔵 Load Google Vision API credentials from Streamlit secrets
 gcp_creds = st.secrets["google"]["credentials"]
 
-# Save to a file for the Google Vision client
 with open("gcp_credentials.json", "w") as f:
     f.write(gcp_creds)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_credentials.json"
@@ -18,7 +17,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_credentials.json"
 # 🔵 Initialize Google Vision API client
 client = vision.ImageAnnotatorClient()
 
-# 🟢 Helper function to parse extracted text into form fields
+# 🟢 Helper function to parse extracted text
 def parse_extracted_text(extracted_text):
     fields = {
         "DATE": "",
@@ -52,9 +51,12 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", use_container_width=True)
 
+    # Reset file pointer to ensure Vision API receives actual image bytes
+    uploaded_file.seek(0)
+    image_bytes = uploaded_file.read()
+
     # Use Google Vision API to extract handwritten text
     with st.spinner("Extracting handwritten text…"):
-        image_bytes = uploaded_file.read()
         gcv_image = vision.Image(content=image_bytes)
         response = client.document_text_detection(image=gcv_image)
         extracted_text = response.full_text_annotation.text
@@ -85,7 +87,6 @@ if uploaded_file:
         submitted = st.form_submit_button("Save to Excel")
 
         if submitted:
-            # Create DataFrame with form data
             data = {
                 "DATE": [date],
                 "TIME": [time_val],
@@ -103,13 +104,11 @@ if uploaded_file:
             }
             df = pd.DataFrame(data)
 
-            # Save to Excel
             excel_buffer = BytesIO()
             with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Rail Data")
             excel_data = excel_buffer.getvalue()
 
-            # Create download link
             b64 = base64.b64encode(excel_data).decode()
             href = f'<a href="data:application/octet-stream;base64,{b64}" download="rail_data.xlsx">Download Excel File</a>'
             st.markdown(href, unsafe_allow_html=True)
