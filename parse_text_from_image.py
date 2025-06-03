@@ -1,19 +1,16 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Make sure no GPU is visible
+os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide any GPU
 
 import streamlit as st
 from PIL import Image
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import torch
 
-# Load TrOCR
 @st.cache_resource(show_spinner="Loading TrOCR model…")
 def load_trocr_model():
     processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten')
-    model = VisionEncoderDecoderModel.from_pretrained(
-        'microsoft/trocr-base-handwritten',
-        device_map="cpu"  # <--- Forcibly load everything on CPU!
-    )
+    model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-handwritten')
+    model = model.to("cpu")  # <-- Move entire model to CPU (works in all versions!)
     return processor, model
 
 processor, model = load_trocr_model()
@@ -27,6 +24,7 @@ if uploaded_file:
 
     with st.spinner("Extracting handwritten text…"):
         pixel_values = processor(images=image, return_tensors="pt").pixel_values
+        pixel_values = pixel_values.to("cpu")  # <-- Ensure input is on CPU
         generated_ids = model.generate(pixel_values)
         extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
